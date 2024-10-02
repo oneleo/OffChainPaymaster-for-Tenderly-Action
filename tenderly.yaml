@@ -1,0 +1,29 @@
+account_id: ""
+project_slug: ""
+actions:
+  irarachen/monitoring:
+    runtime: v2
+    sources: actions
+    specs:
+      # Tenderly Web3 Actions name
+      offchainpaymaster:
+        description: This is just an example, but you can publish this action.
+        execution_type: parallel # Options: parallel, sequential
+        function: offChainPaymasterAction:actionFn # Format: <file name>:<function name>
+        # Note: Tenderly Web3 Actions only supports one TypeScript file;
+        # all custom functions must be in that file.
+        trigger:
+          type: transaction
+          transaction:
+            status:
+              - mined
+            filters:
+              - network: 84532
+                # Transaction must come from the network with network ID 84532
+                status: success
+                # Transaction must have succeeded
+                to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                # Transaction must have been sent to EntryPoint contract
+                contract:
+                  address: 0x81d7a78C455730d0cdEcD5123793C9596ABBf53a
+                  # transaction must have involved the OffChainPaymaster contract
