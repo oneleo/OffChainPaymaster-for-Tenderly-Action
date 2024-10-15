@@ -6,36 +6,9 @@ import {
   Log,
 } from "@tenderly/actions";
 
-import {
-  Interface,
-  hexlify,
-  getBytes,
-  getAddress,
-  AbiCoder,
-  Result,
-  type BytesLike,
-} from "ethers";
+import { getAddress, AbiCoder } from "ethers";
 
 import axios from "axios";
-
-// Offsets for extracting fields from paymasterAndData
-const PAYMASTER_VALIDATION_GAS_OFFSET = 20; // Address (bytes 0-20)
-const PAYMASTER_POSTOP_GAS_OFFSET = 36; // Validation gas (bytes 20-36, uint256)
-const PAYMASTER_DATA_OFFSET = 52; // PostOp gas (bytes 36-52, uint256)
-const PAYMASTER_MODE_OFFSET = PAYMASTER_DATA_OFFSET; // Mode (byte 52, uint8)
-const PAYMASTER_VALID_AFTER_OFFSET = PAYMASTER_MODE_OFFSET + 1; // Valid after (bytes 53-59, uint48)
-const PAYMASTER_VALID_UNTIL_OFFSET = PAYMASTER_VALID_AFTER_OFFSET + 6; // Valid until (bytes 59-65, uint48)
-const PAYMASTER_MAX_COST_ALLOWED_OFFSET = PAYMASTER_VALID_UNTIL_OFFSET + 6; // Max cost allowed (bytes 65-97, uint256)
-
-// ABI for the handleOps function in the EntryPoint contract
-const entryPointAbi = [
-  "function handleOps((address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerificationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature)[] ops, address payable beneficiary)",
-];
-
-// Identifier for PostOpRevertReason event
-// = keccak256(abi.encodePacked("PostOpRevertReason(bytes32,address,uint256,bytes)"))
-const postOpRevertReasonId =
-  "0xf62676f440ff169a3a9afdbf812e89e7f95975ee8e5c31214ffdef631c5f4792";
 
 // Identifier for UserOperationEvent event
 // = keccak256(abi.encodePacked("UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)"))
@@ -51,30 +24,6 @@ const userOpProcessedId =
 enum PaymasterMode {
   Sponsor,
   ChargeInPostOp,
-}
-
-// Interface for UserOperation input structure
-interface PackedUserOperationInput {
-  sender: string; // address
-  nonce: bigint; // uint256
-  initCode: string; // bytes
-  callData: string; // bytes
-  accountGasLimits: bigint; // uint256
-  preVerificationGas: bigint; // uint256
-  gasFees: bigint; // uint256
-  paymasterAndData: string; // bytes
-  signature: string; // bytes
-}
-
-// PaymasterData structure fields
-interface PaymasterDataStruct {
-  paymaster: string; // address
-  validationGasLimit: bigint; // uint256
-  postOpGasLimit: bigint; // uint256
-  mode: PaymasterMode; // uint8
-  validAfter: bigint; // uint256
-  validUntil: bigint; // uint256
-  maxCostAllowed: bigint; // uint256
 }
 
 // Structure for UserOperationEvent event
@@ -123,121 +72,6 @@ const jsonStringify = (data: any): string => {
 // Prints JSON data to console with a title
 export const printJson = (title: string, data: Object) => {
   console.log(`${title}: ${jsonStringify(data)}`);
-};
-
-// Parses handleOps function input from decoded data
-const decodeHandleOpsInput = (
-  input: Result
-): {
-  ops: PackedUserOperationInput[];
-  beneficiary: string;
-} => {
-  const opsData = input.getValue("ops");
-  const beneficiary = input.getValue("beneficiary");
-
-  // Ensure opsData is an array
-  if (!Array.isArray(opsData)) {
-    throw new Error("Invalid ops data format");
-  }
-
-  const ops: PackedUserOperationInput[] = opsData.map((opData: any) => {
-    // Validate operation data
-    if (!Array.isArray(opData) || opData.length !== 9) {
-      throw new Error("Invalid PackedUserOperation data format");
-    }
-
-    return {
-      sender: opData[0] as string,
-      nonce: BigInt(opData[1]),
-      initCode: opData[2] as string,
-      callData: opData[3] as string,
-      accountGasLimits: BigInt(opData[4]),
-      preVerificationGas: BigInt(opData[5]),
-      gasFees: BigInt(opData[6]),
-      paymasterAndData: opData[7] as string,
-      signature: opData[8] as string,
-    };
-  });
-
-  return { ops, beneficiary };
-};
-
-// Decode paymasterAndData into structured fields
-const decodePaymasterAndDataStruct = (
-  paymasterAndData: BytesLike
-): PaymasterDataStruct | null => {
-  const data = getBytes(paymasterAndData);
-
-  // Validate length
-  if (data.length < PAYMASTER_MAX_COST_ALLOWED_OFFSET + 32) {
-    console.error(`Invalid paymasterAndData length: ${data.length}`);
-    return null;
-  }
-
-  try {
-    // Extract paymaster address (bytes 0-20, address)
-    const paymasterAddress = getAddress(
-      hexlify(data.slice(0, PAYMASTER_VALIDATION_GAS_OFFSET))
-    );
-
-    // Extract validationGasLimit (bytes 20-36, uint256)
-    const validationGasLimit = BigInt(
-      hexlify(
-        data.slice(PAYMASTER_VALIDATION_GAS_OFFSET, PAYMASTER_POSTOP_GAS_OFFSET)
-      )
-    );
-
-    // Extract postOpGasLimit (bytes 36-52, uint256)
-    const postOpGasLimit = BigInt(
-      hexlify(data.slice(PAYMASTER_POSTOP_GAS_OFFSET, PAYMASTER_DATA_OFFSET))
-    );
-
-    // Extract PaymasterMode (bytes 52, uint8)
-    const paymasterMode = data[PAYMASTER_MODE_OFFSET];
-
-    // Extract validAfter (bytes 53-59, uint48)
-    const validAfter = BigInt(
-      hexlify(
-        data.slice(
-          PAYMASTER_VALID_AFTER_OFFSET,
-          PAYMASTER_VALID_AFTER_OFFSET + 6
-        )
-      )
-    );
-
-    // Extract validUntil (bytes 59-65, uint48)
-    const validUntil = BigInt(
-      hexlify(
-        data.slice(
-          PAYMASTER_VALID_UNTIL_OFFSET,
-          PAYMASTER_VALID_UNTIL_OFFSET + 6
-        )
-      )
-    );
-
-    // Extract maxCostAllowed (bytes 65-97, uint256)
-    const maxCostAllowed = BigInt(
-      hexlify(
-        data.slice(
-          PAYMASTER_MAX_COST_ALLOWED_OFFSET,
-          PAYMASTER_MAX_COST_ALLOWED_OFFSET + 32
-        )
-      )
-    );
-
-    return {
-      paymaster: paymasterAddress,
-      validationGasLimit,
-      postOpGasLimit,
-      mode: paymasterMode,
-      validAfter,
-      validUntil,
-      maxCostAllowed,
-    };
-  } catch (error) {
-    console.error(`Failed to decode paymasterAndData: ${error}`);
-    return null;
-  }
 };
 
 // Decodes the UserOperationEvent event from logs
@@ -307,60 +141,6 @@ const parseUserOpEvent = (params: {
   }
 
   return decodedUserOpEvents;
-};
-
-// Decodes the PostOpRevertReason event from logs
-const parsePostOpRevertReasonEvents = (params: {
-  logs: Log[];
-  filterUserOpHashes?: string[];
-}): PostOpRevertReasonEventParams[] => {
-  const eventLogs = params.logs.filter(
-    (log) => log.topics[0] === postOpRevertReasonId
-  );
-
-  // Log warning if no matching events are found
-  if (eventLogs.length === 0) {
-    console.warn(`PostOpRevertReason not found`);
-    return [];
-  }
-
-  // Use reduce to accumulate valid events
-  const decodedPostOpRevertReasonEvents = eventLogs.reduce<
-    PostOpRevertReasonEventParams[]
-  >((postOpRevertReasons, eventLog) => {
-    const userOpHash = eventLog.topics[1];
-
-    // Apply filter if provided
-    if (
-      params.filterUserOpHashes &&
-      !params.filterUserOpHashes.includes(userOpHash)
-    ) {
-      return postOpRevertReasons;
-    }
-
-    const sender = getAddress("0x" + eventLog.topics[2].slice(26));
-
-    const [nonce, revertReason] = AbiCoder.defaultAbiCoder().decode(
-      ["uint256", "bytes"],
-      eventLog.data
-    );
-
-    // Push valid event to result
-    postOpRevertReasons.push({
-      userOpHash,
-      sender,
-      nonce,
-      revertReason,
-    });
-
-    return postOpRevertReasons;
-  }, []);
-
-  if (decodedPostOpRevertReasonEvents.length === 0) {
-    console.warn(`No matching PostOpRevertReason events found`);
-  }
-
-  return decodedPostOpRevertReasonEvents;
 };
 
 // Decodes the UserOpProcessed event from logs
@@ -517,8 +297,7 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
     return;
   }
 
-  // Process transaction event and decode input
-  const input = transactionEvent.input;
+  // Process transaction event
   const logs = transactionEvent.logs as Log[];
 
   // Fetch UserOperationEvent logs if paymaster is OffChainPaymaster
@@ -562,40 +341,6 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
         jsonStringify(userOpProcessedLog),
         discordWebhookLink
       );
-    }
-  }
-
-  const entryPointIface = new Interface(entryPointAbi);
-
-  // Decode input data for handleOps function
-  const decodedInput = entryPointIface.decodeFunctionData("handleOps", input);
-
-  // Parse user operations and beneficiary
-  const { ops } = decodeHandleOpsInput(decodedInput);
-
-  // Process each operation
-  for (const op of ops) {
-    // Decode paymasterAndData into structured fields
-    const decodedPaymasterAndData = decodePaymasterAndDataStruct(
-      op.paymasterAndData
-    );
-
-    // Invalid paymasterAndData encountered
-    if (!decodedPaymasterAndData) {
-      continue;
-    }
-
-    if (decodedPaymasterAndData.mode !== PaymasterMode.ChargeInPostOp) {
-      console.warn(`Paymaster mode is not ChargeInPostOp`);
-      continue;
-    }
-
-    // If paymaster mode is ChargeInPostOp, fetch PostOpRevertReason event
-    const postOpRevertReasonLog = parsePostOpRevertReasonEvents({ logs });
-
-    // PostOpRevertReason event not found
-    if (!postOpRevertReasonLog) {
-      continue;
     }
   }
 
