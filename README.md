@@ -44,8 +44,9 @@ actions:
 ###
 ```
 
-3. Set your contract and target network ID to trigger
-   - In this case, contract is `0x0000000071727De22E5E9d8BAf0edAc6f37da032`, network ID is `84532`
+3. Set your network ID, target contract, and filter events using topics[0].
+   - In this case, network ID = `84532` (Base Sepolia), target contract = EntryPoint (`0x0000000071727De22E5E9d8BAf0edAc6f37da032`),
+   - and filter for UserOpProcessed event (topics[0] = `0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9`) from OffChainPaymaster at `0xBDd6EB5C9A89f21B559f65C6b2bbeC265cE54C82`
 
 ```shell
 code tenderly.yaml
@@ -54,14 +55,19 @@ code tenderly.yaml
 # ...
             filters:
               - network: 84532
-                # Transaction must come from the network with network ID
+                # Transaction must come from the network with network ID 84532
                 status: success
                 # Transaction must have succeeded
                 to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
                 # Transaction must have been sent to EntryPoint contract
-                contract:
-                  address: 0x81d7a78C455730d0cdEcD5123793C9596ABBf53a
-                  # transaction must have involved the OffChainPaymaster contract
+                logEmitted:
+                  # Transaction must have emitted a log entry
+                  contract:
+                    address: 0xBDd6EB5C9A89f21B559f65C6b2bbeC265cE54C82
+                    # coming from the OffChainPaymaster contract at this address
+                  startsWith:
+                    # and topics of the log entry must start with either one of these
+                    - 0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9
 # ...
 ###
 ```
