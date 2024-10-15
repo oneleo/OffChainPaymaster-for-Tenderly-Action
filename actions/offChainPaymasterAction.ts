@@ -59,54 +59,54 @@ interface PackedUserOperationInput {
   nonce: bigint; // uint256
   initCode: string; // bytes
   callData: string; // bytes
-  accountGasLimits: bigint; // bytes32 as BigNumber
+  accountGasLimits: bigint; // uint256
   preVerificationGas: bigint; // uint256
-  gasFees: bigint; // bytes32 as BigNumber
+  gasFees: bigint; // uint256
   paymasterAndData: string; // bytes
   signature: string; // bytes
 }
 
 // PaymasterData structure fields
 interface PaymasterDataStruct {
-  paymaster: string;
-  validationGasLimit: bigint;
-  postOpGasLimit: bigint;
-  mode: PaymasterMode;
-  validAfter: bigint;
-  validUntil: bigint;
-  maxCostAllowed: bigint;
+  paymaster: string; // address
+  validationGasLimit: bigint; // uint256
+  postOpGasLimit: bigint; // uint256
+  mode: PaymasterMode; // uint8
+  validAfter: bigint; // uint256
+  validUntil: bigint; // uint256
+  maxCostAllowed: bigint; // uint256
 }
 
 // Structure for UserOperationEvent event
 export interface UserOpEventParams {
-  userOpHash: string;
-  sender: string;
-  paymaster: string;
-  nonce: bigint;
-  success: boolean;
-  actualGasCost: bigint;
-  actualGasUsed: bigint;
+  userOpHash: string; // bytes32
+  sender: string; // address
+  paymaster: string; // address
+  nonce: bigint; // uint256
+  success: boolean; // bool
+  actualGasCost: bigint; // uint256
+  actualGasUsed: bigint; // uint256
 }
 
 // Structure for PostOpRevertReason event
 export interface PostOpRevertReasonEventParams {
-  userOpHash: string;
-  sender: string;
-  nonce: bigint;
-  revertReason: string;
+  userOpHash: string; // bytes32
+  sender: string; // address
+  nonce: bigint; // uint256
+  revertReason: string; // bytes
 }
 
 // Structure for UserOpProcessed event
 export interface UserOpProcessedEventParams {
-  userOpHash: string;
-  userOpSender: string;
-  signerDataHash: string;
-  mode: PaymasterMode;
-  actualGasCost: bigint;
-  token: string;
-  actualTokenCost: bigint;
-  chargeFrom: string;
-  chargeSuccessful: boolean;
+  userOpHash: string; // bytes32
+  userOpSender: string; // address
+  signerDataHash: string; // bytes32
+  mode: PaymasterMode; // uint8
+  actualGasCost: bigint; // uint256
+  token: string; // address
+  actualTokenCost: bigint; // uint256
+  chargeFrom: string; // address
+  chargeSuccessful: boolean; // bool
 }
 
 // Logs JSON data, converting BigInt to string
@@ -252,17 +252,16 @@ const parseUserOpEvent = (params: {
 
   // Log warning if no matching events are found
   if (eventLogs.length === 0) {
-    console.warn(`UserOperationEvent event not found`);
+    console.warn(`UserOperationEvent not found`);
     return [];
   }
 
   // Use reduce to accumulate valid events
   const decodedUserOpEvents = eventLogs.reduce<UserOpEventParams[]>(
     (userOps, eventLog) => {
-      // Extract userOpHash from indexed topic
       const userOpHash = eventLog.topics[1];
 
-      // Skip if the userOpHash doesn't match the filter (if provided)
+      // Skip if the userOpHash doesn't match the filter
       if (
         params.filterUserOpHashes &&
         !params.filterUserOpHashes.includes(userOpHash)
@@ -270,12 +269,10 @@ const parseUserOpEvent = (params: {
         return userOps;
       }
 
-      // Extract sender and paymaster address from indexed topic
       const sender = getAddress("0x" + eventLog.topics[2].slice(26));
-
       const paymaster = getAddress("0x" + eventLog.topics[3].slice(26));
 
-      // Skip if the paymaster doesn't match the filter (if provided)
+      // Skip if the paymaster doesn't match the filter
       if (
         params.filterPaymasters &&
         !params.filterPaymasters.includes(paymaster)
@@ -283,13 +280,13 @@ const parseUserOpEvent = (params: {
         return userOps;
       }
 
-      // Extract nonce, success, actualGasCost and actualGasUsed from data
       const [nonce, success, actualGasCost, actualGasUsed] =
         AbiCoder.defaultAbiCoder().decode(
           ["uint256", "bool", "uint256", "uint256"],
           eventLog.data
         );
 
+      // Push valid event to result
       userOps.push({
         userOpHash,
         sender,
@@ -306,7 +303,7 @@ const parseUserOpEvent = (params: {
   );
 
   if (decodedUserOpEvents.length === 0) {
-    console.warn(`No UserOperationEvent events matched the provided filter`);
+    console.warn(`No matching UserOperationEvent found`);
   }
 
   return decodedUserOpEvents;
@@ -321,19 +318,19 @@ const parsePostOpRevertReasonEvents = (params: {
     (log) => log.topics[0] === postOpRevertReasonId
   );
 
-  // Log warning if event not found
+  // Log warning if no matching events are found
   if (eventLogs.length === 0) {
-    console.warn(`PostOpRevertReason event not found`);
+    console.warn(`PostOpRevertReason not found`);
     return [];
   }
 
+  // Use reduce to accumulate valid events
   const decodedPostOpRevertReasonEvents = eventLogs.reduce<
     PostOpRevertReasonEventParams[]
   >((postOpRevertReasons, eventLog) => {
-    // Extract userOpHash from indexed topic
     const userOpHash = eventLog.topics[1];
 
-    // Skip if the userOpHash doesn't match the filter (if provided)
+    // Apply filter if provided
     if (
       params.filterUserOpHashes &&
       !params.filterUserOpHashes.includes(userOpHash)
@@ -341,15 +338,14 @@ const parsePostOpRevertReasonEvents = (params: {
       return postOpRevertReasons;
     }
 
-    // Extract sender address from indexed topic
     const sender = getAddress("0x" + eventLog.topics[2].slice(26));
 
-    // Extract nonce and revertReason from data
     const [nonce, revertReason] = AbiCoder.defaultAbiCoder().decode(
       ["uint256", "bytes"],
       eventLog.data
     );
 
+    // Push valid event to result
     postOpRevertReasons.push({
       userOpHash,
       sender,
@@ -361,7 +357,7 @@ const parsePostOpRevertReasonEvents = (params: {
   }, []);
 
   if (decodedPostOpRevertReasonEvents.length === 0) {
-    console.warn(`No PostOpRevertReason events matched the provided filter`);
+    console.warn(`No matching PostOpRevertReason events found`);
   }
 
   return decodedPostOpRevertReasonEvents;
@@ -376,19 +372,19 @@ const parseUserOpProcessedEvents = (params: {
     (log) => log.topics[0] === userOpProcessedId
   );
 
-  // Log warning if event not found
+  // Log warning if no matching events are found
   if (eventLogs.length === 0) {
-    console.warn(`UserOpProcessed event not found`);
+    console.warn(`UserOpProcessed not found`);
     return [];
   }
 
+  // Use reduce to accumulate valid events
   const decodedUserOpProcessedEvents = eventLogs.reduce<
     UserOpProcessedEventParams[]
   >((UserOpProcesseds, eventLog) => {
-    // Extract userOpHash from indexed topic
     const userOpHash = eventLog.topics[1];
 
-    // Skip if the userOpHash doesn't match the filter (if provided)
+    // Apply filters if provided
     if (
       params.filterUserOpHashes &&
       !params.filterUserOpHashes.includes(userOpHash)
@@ -396,12 +392,9 @@ const parseUserOpProcessedEvents = (params: {
       return UserOpProcesseds;
     }
 
-    // Extract userOpSender address from indexed topic
     const userOpSender = getAddress("0x" + eventLog.topics[2].slice(26));
-
     const signerDataHash = eventLog.topics[3];
 
-    // Extract mode, actualGasCost, token and etc. from data
     const [
       mode,
       actualGasCost,
@@ -414,6 +407,7 @@ const parseUserOpProcessedEvents = (params: {
       eventLog.data
     );
 
+    // Push valid event to result
     UserOpProcesseds.push({
       userOpHash,
       userOpSender,
@@ -430,7 +424,7 @@ const parseUserOpProcessedEvents = (params: {
   }, []);
 
   if (decodedUserOpProcessedEvents.length === 0) {
-    console.warn(`No UserOpProcessed events matched the provided filter`);
+    console.warn(`No matching UserOpProcessed events found`);
   }
 
   return decodedUserOpProcessedEvents;
@@ -439,7 +433,7 @@ const parseUserOpProcessedEvents = (params: {
 // Sends notifications to Discord webhook
 const notifyDiscord = async (text: string, webhookLink: string) => {
   if (!webhookLink) {
-    console.error(`Cannot find discord webhook link`);
+    console.error(`Discord webhook link not found`);
     return;
   }
 
@@ -461,9 +455,15 @@ const notifyDiscord = async (text: string, webhookLink: string) => {
   try {
     // Send message to Discord
     const response = await axios.post(webhookLink, data, config);
-    printJson("response", response);
+
+    // Throw error if response status is not 204
+    if (response.status !== 204) {
+      throw new Error(
+        `Failed to send Discord notification: ${response.statusText}`
+      );
+    }
   } catch (error) {
-    console.error(`Webhook post failed: ${jsonStringify(error)}`);
+    console.error(`Error sending Discord notification: ${error}`);
   }
 };
 
@@ -486,24 +486,11 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
   // await context.storage.putStr('MY-KEY', 'MY-VALUE')
 
   // Your logic goes here :)
-  //
 
-  // Set storage at: https://dashboard.tenderly.co/IraraChen/monitoring/actions/storage
-  // Example:
-  //   MONITORED_PAYMASTER_ADDRESS = [
-  //     "0x44D6f8362c144A1217f24A11bE35f2c418B6cb20",
-  //     "0x81d7a78C455730d0cdEcD5123793C9596ABBf53a",
-  //   ];
+  // Configure storage: https://dashboard.tenderly.co/IraraChen/monitoring/actions/storage
+  // Example: MONITORED_PAYMASTER_ADDRESS=["0x44D6f8362c144A1217f24A11bE35f2c418B6cb20", "0xBDd6EB5C9A89f21B559f65C6b2bbeC265cE54C82"]
   const monitoredPaymasterAddress: string[] = await context.storage.getJson(
     "MONITORED_PAYMASTER_ADDRESS"
-  );
-
-  console.log(
-    `monitoredPaymasterAddress: ${JSON.stringify(
-      monitoredPaymasterAddress,
-      null,
-      2
-    )}`
   );
 
   if (
@@ -514,12 +501,14 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
     return;
   }
 
-  // Set secret at: https://dashboard.tenderly.co/IraraChen/monitoring/actions/secrets
-  // Example:
-  // DISCORD_PAYMASTER_CHANNEL_WEBHOOK=https://discord.com/api/webhooks/xxx/xxx
+  printJson("monitoredPaymasterAddress", monitoredPaymasterAddress);
+
+  // Configure secret: https://dashboard.tenderly.co/IraraChen/monitoring/actions/secrets
+  // Example: DISCORD_PAYMASTER_CHANNEL_WEBHOOK=https://discord.com/api/webhooks/xxx/xxx
   const discordWebhookLink = await context.secrets.get(
     "DISCORD_PAYMASTER_CHANNEL_WEBHOOK"
   );
+
   console.log(discordWebhookLink);
 
   // Cast event to TransactionEvent type
@@ -532,11 +521,12 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
   const input = transactionEvent.input;
   const logs = transactionEvent.logs as Log[];
 
-  // If paymaster is OffChainPaymaster, fetch UserOperationEvent event
+  // Fetch UserOperationEvent logs if paymaster is OffChainPaymaster
   const userOpEventLogs = parseUserOpEvent({
     logs,
     filterPaymasters: monitoredPaymasterAddress,
   });
+
   if (userOpEventLogs.length === 0) {
     return;
   }
@@ -547,13 +537,16 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
     logs,
     filterUserOpHashes: userOpHashes,
   });
+
   if (userOpProcessedLogs.length === 0) {
     return;
   }
 
   printJson("userOpProcessedLogs", userOpProcessedLogs);
 
+  // Process each user operation processed log
   for (const userOpProcessedLog of userOpProcessedLogs) {
+    // Skip if not in ChargeInPostOp mode
     if (userOpProcessedLog.mode !== PaymasterMode.ChargeInPostOp) {
       continue;
     }
@@ -564,7 +557,7 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
 
     if (!userOpProcessedLog.chargeSuccessful) {
       await pushToStorage(context, "ChargeInPostOpFail", userOpProcessedLog);
-      // Notify Discord with the post-operation revert reason
+      // Notify Discord with the post-operation revert
       await notifyDiscord(
         jsonStringify(userOpProcessedLog),
         discordWebhookLink
@@ -576,11 +569,9 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
 
   // Decode input data for handleOps function
   const decodedInput = entryPointIface.decodeFunctionData("handleOps", input);
-  //   printJson("decodedInput", decodedInput);
 
   // Parse user operations and beneficiary
   const { ops } = decodeHandleOpsInput(decodedInput);
-  //   printJson("ops", ops);
 
   // Process each operation
   for (const op of ops) {
