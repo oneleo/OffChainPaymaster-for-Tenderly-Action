@@ -81,3 +81,12 @@ tenderly actions deploy
 ```
 
 5. In [offChainPaymasterAction.ts](https://github.com/oneleo/OffChainPaymaster-for-Tenderly-Action/blob/action-for-paymaster/actions/offChainPaymasterAction.ts#L320-L331), when OffChainPaymaster is in `ChargeInPostOp` mode and emits a `PostOpRevertReason` event, you'll receive event details on Discord.
+
+## Test
+
+1. Run Tests
+
+```
+### Navigate to the actions directory and execute the tests
+(cd actions/ && npm run test)
+```
