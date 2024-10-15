@@ -24,6 +24,8 @@ actions:
                 # Transaction must have succeeded
                 to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
                 # Transaction must have been sent to EntryPoint contract
-                contract:
-                  address: 0x81d7a78C455730d0cdEcD5123793C9596ABBf53a
-                  # transaction must have involved the OffChainPaymaster contract
+                logEmitted:
+                  contract:
+                    address: 0xBDd6EB5C9A89f21B559f65C6b2bbeC265cE54C82
+                  startsWith:
+                    - 0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9
