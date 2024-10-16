@@ -6,19 +6,21 @@ import {
   Log,
 } from "@tenderly/actions";
 
-import { getAddress, AbiCoder } from "ethers";
+import { getAddress, AbiCoder, hexlify } from "ethers";
 
 import axios from "axios";
 
 // Identifier for UserOperationEvent event
 // = keccak256(abi.encodePacked("UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)"))
-const userOperationEventId =
-  "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f";
+const userOperationEventId = hexlify(
+  "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f"
+);
 
 // Identifier for UserOpProcessed event
 // = keccak256(abi.encodePacked("UserOpProcessed(bytes32,address,bytes32,uint8,uint256,address,uint256,address,bool)"))
-const userOpProcessedId =
-  "0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9";
+const userOpProcessedId = hexlify(
+  "0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9"
+);
 
 // Paymaster operation modes
 enum PaymasterMode {
@@ -81,7 +83,7 @@ const parseUserOpEvent = (params: {
   filterPaymasters?: string[];
 }): UserOpEventParams[] => {
   const eventLogs = params.logs.filter(
-    (log) => log.topics[0] === userOperationEventId
+    (log) => hexlify(log.topics[0]) === userOperationEventId
   );
 
   // Log warning if no matching events are found
@@ -93,7 +95,7 @@ const parseUserOpEvent = (params: {
   // Use reduce to accumulate valid events
   const decodedUserOpEvents = eventLogs.reduce<UserOpEventParams[]>(
     (userOps, eventLog) => {
-      const userOpHash = eventLog.topics[1];
+      const userOpHash = hexlify(eventLog.topics[1]);
 
       // Skip if the userOpHash doesn't match the filter
       if (
@@ -149,7 +151,7 @@ const parseUserOpProcessedEvents = (params: {
   filterUserOpHashes?: string[];
 }): UserOpProcessedEventParams[] => {
   const eventLogs = params.logs.filter(
-    (log) => log.topics[0] === userOpProcessedId
+    (log) => hexlify(log.topics[0]) === userOpProcessedId
   );
 
   // Log warning if no matching events are found
@@ -162,7 +164,7 @@ const parseUserOpProcessedEvents = (params: {
   const decodedUserOpProcessedEvents = eventLogs.reduce<
     UserOpProcessedEventParams[]
   >((UserOpProcesseds, eventLog) => {
-    const userOpHash = eventLog.topics[1];
+    const userOpHash = hexlify(eventLog.topics[1]);
 
     // Apply filters if provided
     if (
@@ -173,7 +175,7 @@ const parseUserOpProcessedEvents = (params: {
     }
 
     const userOpSender = getAddress("0x" + eventLog.topics[2].slice(26));
-    const signerDataHash = eventLog.topics[3];
+    const signerDataHash = hexlify(eventLog.topics[3]);
 
     const [
       mode,
@@ -194,9 +196,9 @@ const parseUserOpProcessedEvents = (params: {
       signerDataHash,
       mode: Number(mode),
       actualGasCost,
-      token,
+      token: getAddress(token),
       actualTokenCost,
-      chargeFrom,
+      chargeFrom: getAddress(chargeFrom),
       chargeSuccessful,
     });
 
@@ -247,6 +249,7 @@ const notifyDiscord = async (text: string, webhookLink: string) => {
   }
 };
 
+// Append a value to a JSON array in Tenderly Web3 Action storage
 const pushToStorage = async (context: Context, key: string, value: any) => {
   let jsonData = await context.storage.getJson(key);
   if (jsonData && Object.keys(jsonData).length === 0) {
@@ -281,6 +284,11 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
     return;
   }
 
+  // Normalize paymaster addresses
+  monitoredPaymasterAddress.forEach((paymaster, index, arr) => {
+    arr[index] = getAddress(paymaster);
+  });
+
   printJson("monitoredPaymasterAddress", monitoredPaymasterAddress);
 
   // Configure secret: https://dashboard.tenderly.co/IraraChen/monitoring/actions/secrets
@@ -310,6 +318,7 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
     return;
   }
 
+  // Extract user operation hashes from event logs
   const userOpHashes = userOpEventLogs.map((userOp) => userOp.userOpHash);
 
   const userOpProcessedLogs = parseUserOpProcessedEvents({
