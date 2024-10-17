@@ -1,5 +1,9 @@
 # OffChainPaymaster-for-Tenderly-Action
 
+## Tenderly Web3 Actions overview
+
+![Tenderly Web3 Actions overview](images/tenderlyWeb3ActionsOverview.png "Tenderly Web3 Actions overview")
+
 ## Prerequisites
 
 1. Please create an account on [Tenderly](https://dashboard.tenderly.co/), then build a project
@@ -14,7 +18,11 @@
 
 ![Add webhook to Actions secrets](images/addWebhookToActionsSecrets.png "Add webhook to Actions secrets")
 
-4. Install Tenderly CLI on local
+4. Add a storage entry "MONITORED_PAYMASTER_ADDRESS" as a string array, e.g., `["0x44D6f8362c144A1217f24A11bE35f2c418B6cb20", "0xBDd6EB5C9A89f21B559f65C6b2bbeC265cE54C82"]`.
+
+![Add paymaster addresses to actions storage](images/addPaymasterAddressesToActionsStorage.png "Add paymaster addresses to actions storage")
+
+5. Install Tenderly CLI on local
 
 ```shell
 brew tap tenderly/tenderly && brew install tenderly
