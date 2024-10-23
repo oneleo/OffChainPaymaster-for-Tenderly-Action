@@ -4,6 +4,7 @@ import { expect } from "chai";
 import {
   actionFn,
   UserOpProcessedEventParams,
+  PostOpRevertReasonEventParams,
 } from "../offChainPaymasterAction";
 import { handleOpsPayload } from "./fixtures/handleOpsPayload";
 
@@ -30,5 +31,10 @@ describe("TicTacToeActions", () => {
       await testRuntime.context.storage.getJson("ChargeInPostOpFail");
 
     expect(chargeInPostOpFail[0].chargeSuccessful).to.eq(false);
+
+    const postOpRevertReason: PostOpRevertReasonEventParams[] =
+      await testRuntime.context.storage.getJson("PostOpRevertReason");
+
+    expect(postOpRevertReason[0].revertReason.error).to.eq("CanNotChargeFrom");
   });
 });
