@@ -6,7 +6,7 @@ import {
   Log,
 } from "@tenderly/actions";
 
-import { getAddress, AbiCoder, hexlify } from "ethers";
+import { getAddress, AbiCoder, hexlify, Interface, dataSlice } from "ethers";
 
 import axios from "axios";
 
@@ -16,11 +16,28 @@ const userOperationEventId = hexlify(
   "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f"
 );
 
+// Identifier for PostOpRevertReason event
+// = keccak256(abi.encodePacked("PostOpRevertReason(bytes32,address,uint256,bytes)"))
+const postOpRevertReasonId =
+  "0xf62676f440ff169a3a9afdbf812e89e7f95975ee8e5c31214ffdef631c5f4792";
+
 // Identifier for UserOpProcessed event
 // = keccak256(abi.encodePacked("UserOpProcessed(bytes32,address,bytes32,uint8,uint256,address,uint256,address,bool)"))
 const userOpProcessedId = hexlify(
   "0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9"
 );
+
+// Identifier for CanNotChargeFrom error
+// = keccak256(abi.encodePacked("CanNotChargeFrom()"))
+const canNotChargeFromId = hexlify(
+  "0x58e450b14e49a4d03ffcd259c7ba1dfa2ce932e62dfac7782ca5d6cc50c1be10"
+);
+
+const canNotChargeFromSelector = dataSlice(canNotChargeFromId, 0, 4);
+
+const entryPointInterface = new Interface([
+  "error PostOpReverted(bytes returnData)",
+]);
 
 // Paymaster operation modes
 enum PaymasterMode {
@@ -44,8 +61,16 @@ export interface PostOpRevertReasonEventParams {
   userOpHash: string; // bytes32
   sender: string; // address
   nonce: bigint; // uint256
-  revertReason: string; // bytes
+  revertReason: PostOpReverted; // bytes
 }
+
+export type PostOpReverted =
+  | {
+      error: string;
+    }
+  | {
+      error: "CanNotChargeFrom";
+    };
 
 // Structure for UserOpProcessed event
 export interface UserOpProcessedEventParams {
@@ -143,6 +168,79 @@ const parseUserOpEvent = (params: {
   }
 
   return decodedUserOpEvents;
+};
+
+// Decodes the PostOpRevertReason event from logs
+const parsePostOpRevertReasonEvents = (params: {
+  logs: Log[];
+  filterUserOpHashes?: string[];
+}): PostOpRevertReasonEventParams[] => {
+  const eventLogs = params.logs.filter(
+    (log) => log.topics[0] === postOpRevertReasonId
+  );
+
+  // Log warning if event not found
+  if (eventLogs.length === 0) {
+    console.warn(`PostOpRevertReason event not found`);
+    return [];
+  }
+
+  const decodedPostOpRevertReasonEvents = eventLogs.reduce<
+    PostOpRevertReasonEventParams[]
+  >((postOpRevertReasons, eventLog) => {
+    // Extract userOpHash from indexed topic
+    const userOpHash = eventLog.topics[1];
+
+    // Skip if the userOpHash doesn't match the filter (if provided)
+    if (
+      params.filterUserOpHashes &&
+      !params.filterUserOpHashes.includes(userOpHash)
+    ) {
+      return postOpRevertReasons;
+    }
+
+    // Extract sender address from indexed topic
+    const sender = getAddress(dataSlice(eventLog.topics[2], 12));
+
+    // Extract nonce and revertReason from data
+    const [nonce, revertReason] = AbiCoder.defaultAbiCoder().decode(
+      ["uint256", "bytes"],
+      eventLog.data
+    );
+
+    const [returnData] = entryPointInterface.decodeErrorResult(
+      "PostOpReverted",
+      revertReason
+    );
+
+    let postOpReverted: PostOpReverted;
+
+    switch (hexlify(returnData)) {
+      case canNotChargeFromSelector: {
+        postOpReverted = { error: "CanNotChargeFrom" };
+        break;
+      }
+      default: {
+        postOpReverted = { error: hexlify(returnData) };
+        break;
+      }
+    }
+
+    postOpRevertReasons.push({
+      userOpHash,
+      sender,
+      nonce,
+      revertReason: postOpReverted,
+    });
+
+    return postOpRevertReasons;
+  }, []);
+
+  if (decodedPostOpRevertReasonEvents.length === 0) {
+    console.warn(`No PostOpRevertReason events matched the provided filter`);
+  }
+
+  return decodedPostOpRevertReasonEvents;
 };
 
 // Decodes the UserOpProcessed event from logs
@@ -275,25 +373,25 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
   // Your logic goes here :)
 
   // Configure storage: https://dashboard.tenderly.co/IraraChen/monitoring/actions/storage
-  // Example: MONITORED_PAYMASTER_ADDRESS=["0x44D6f8362c144A1217f24A11bE35f2c418B6cb20", "0xBDd6EB5C9A89f21B559f65C6b2bbeC265cE54C82"]
-  const monitoredPaymasterAddress: string[] = await context.storage.getJson(
-    "MONITORED_PAYMASTER_ADDRESS"
+  // Example: MONITORED_PAYMASTER_ADDRESSES=["0x44D6f8362c144A1217f24A11bE35f2c418B6cb20","0xBDd6EB5C9A89f21B559f65C6b2bbeC265cE54C82","0x4779C973b060c9cc1592b404cAd9CB5AFB0d4B52"]
+  const monitoredPaymasterAddresses: string[] = await context.storage.getJson(
+    "MONITORED_PAYMASTER_ADDRESSES"
   );
 
   if (
-    monitoredPaymasterAddress &&
-    Object.keys(monitoredPaymasterAddress).length === 0
+    monitoredPaymasterAddresses &&
+    Object.keys(monitoredPaymasterAddresses).length === 0
   ) {
     console.error(`Cannot get monitored paymaster address`);
     return;
   }
 
   // Normalize paymaster addresses
-  monitoredPaymasterAddress.forEach((paymaster, index, arr) => {
+  monitoredPaymasterAddresses.forEach((paymaster, index, arr) => {
     arr[index] = getAddress(paymaster);
   });
 
-  printJson("monitoredPaymasterAddress", monitoredPaymasterAddress);
+  printJson("monitoredPaymasterAddress", monitoredPaymasterAddresses);
 
   // Configure secret: https://dashboard.tenderly.co/IraraChen/monitoring/actions/secrets
   // Example: DISCORD_PAYMASTER_CHANNEL_WEBHOOK=https://discord.com/api/webhooks/xxx/xxx
@@ -315,24 +413,26 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
   // Fetch UserOperationEvent logs if paymaster is OffChainPaymaster
   const userOpEventLogs = parseUserOpEvent({
     logs,
-    filterPaymasters: monitoredPaymasterAddress,
+    filterPaymasters: monitoredPaymasterAddresses,
   });
 
   if (userOpEventLogs.length === 0) {
     return;
   }
 
-  // Extract user operation hashes from event logs
-  const userOpHashes = userOpEventLogs.map((userOp) => userOp.userOpHash);
+  // Extract user operation hashes and paymasters from event logs
+  const userOpHashes: string[] = [];
+  const paymasters: Record<string, string> = {};
+
+  userOpEventLogs.forEach((userOp) => {
+    userOpHashes.push(userOp.userOpHash);
+    paymasters[userOp.userOpHash] = userOp.paymaster;
+  });
 
   const userOpProcessedLogs = parseUserOpProcessedEvents({
     logs,
     filterUserOpHashes: userOpHashes,
   });
-
-  if (userOpProcessedLogs.length === 0) {
-    return;
-  }
 
   printJson("userOpProcessedLogs", userOpProcessedLogs);
 
@@ -352,7 +452,11 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
 
       const transactionHash = transactionEvent.hash;
       const sender = userOpProcessedLog.userOpSender;
-      const text = `Transaction ${transactionHash} failed to collect charges from sender ${sender} in the ChargeInPostOp mode of the OffChainPaymaster. Please check for any potential misconduct by the sender`;
+      const text = `Transaction ${transactionHash} with UserOpProcessed() event and userOpHash ${
+        userOpProcessedLog.userOpHash
+      } failed to collect charges from sender ${sender} in ChargeInPostOp mode under OffChainPaymaster ${
+        paymasters[userOpProcessedLog.userOpHash]
+      }. Please check for any potential misconduct by sender.`;
 
       // Notify Discord with the post-operation revert
       await notifyDiscord(
@@ -361,6 +465,33 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
         discordWebhookLink
       );
     }
+  }
+
+  const postOpRevertReasonLogs = parsePostOpRevertReasonEvents({
+    logs,
+    filterUserOpHashes: userOpHashes,
+  });
+
+  printJson("postOpRevertReasonLogs", postOpRevertReasonLogs);
+
+  // Process each user operation processed log
+  for (const postOpRevertReasonLog of postOpRevertReasonLogs) {
+    await pushToStorage(context, "PostOpRevertReason", postOpRevertReasonLog);
+
+    const transactionHash = transactionEvent.hash;
+    const sender = postOpRevertReasonLog.sender;
+    const text = `Transaction ${transactionHash} with PostOpRevertReason() event and userOpHash ${
+      postOpRevertReasonLog.userOpHash
+    } was reverted for sender ${sender} during ChargeInPostOp mode under OffChainPaymaster ${
+      paymasters[postOpRevertReasonLog.userOpHash]
+    }. Please check for any potential misconduct by the sender.`;
+
+    // Notify Discord with the post-operation revert
+    await notifyDiscord(
+      text,
+      jsonStringify(postOpRevertReasonLog),
+      discordWebhookLink
+    );
   }
 
   console.log(`Tenderly Web3 Action script completed`);
