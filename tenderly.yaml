@@ -1,0 +1,80 @@
+account_id: ""
+project_slug: ""
+actions:
+  irarachen/monitoring:
+    runtime: v2
+    sources: actions
+    specs:
+      # Tenderly Web3 Actions name
+      offchainpaymaster:
+        description: Monitor OffChainPaymaster failures or reverts in ChargeInPostOp mode.
+        execution_type: parallel # Options: parallel, sequential
+        function: offChainPaymasterAction:actionFn # Format: <file name>:<function name>
+        # Note: Tenderly Web3 Actions only supports one TypeScript file;
+        # all custom functions must be in that file.
+        trigger:
+          type: transaction
+          transaction:
+            status:
+              - mined
+            filters:
+              - network: 84532
+                # Transaction must come from the network with network ID 84532
+                status: success
+                # Transaction must have succeeded
+                to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                # Transaction must have been sent to EntryPoint contract
+                logEmitted:
+                  # Transaction must have emitted a log entry
+                  contract:
+                    address: 0xBDd6EB5C9A89f21B559f65C6b2bbeC265cE54C82
+                    # coming from the OffChainPaymaster contract at this address
+                  startsWith:
+                    # and topics of the log entry must start with either one of these
+                    - 0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9
+                    # UserOpProcessed(bytes32,address,bytes32,uint8,uint256,address,uint256,address,bool)
+              - network: 84532
+                # Transaction must come from the network with network ID 84532
+                status: success
+                # Transaction must have succeeded
+                to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                # Transaction must have been sent to EntryPoint contract
+                logEmitted:
+                  # Transaction must have emitted a log entry
+                  contract:
+                    address: 0x44D6f8362c144A1217f24A11bE35f2c418B6cb20
+                    # coming from the OffChainPaymaster contract at this address
+                  startsWith:
+                    # and topics of the log entry must start with either one of these
+                    - 0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9
+                    # UserOpProcessed(bytes32,address,bytes32,uint8,uint256,address,uint256,address,bool)
+              - network: 84532
+                # Transaction must come from the network with network ID 84532
+                status: success
+                # Transaction must have succeeded
+                to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                # Transaction must have been sent to EntryPoint contract
+                logEmitted:
+                  # Transaction must have emitted a log entry
+                  contract:
+                    address: 0x4779C973b060c9cc1592b404cAd9CB5AFB0d4B52
+                    # coming from the OffChainPaymaster contract at this address
+                  startsWith:
+                    # and topics of the log entry must start with either one of these
+                    - 0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9
+                    # UserOpProcessed(bytes32,address,bytes32,uint8,uint256,address,uint256,address,bool)
+              - network: 84532
+                # Transaction must come from the network with network ID 84532
+                status: success
+                # Transaction must have succeeded
+                to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                # Transaction must have been sent to EntryPoint contract
+                logEmitted:
+                  # Transaction must have emitted a log entry
+                  contract:
+                    address: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                    # coming from the EntryPoint contract at this address
+                  startsWith:
+                    # and topics of the log entry must start with either one of these
+                    - 0xf62676f440ff169a3a9afdbf812e89e7f95975ee8e5c31214ffdef631c5f4792
+                    # PostOpRevertReason(bytes32,address,uint256,bytes)
