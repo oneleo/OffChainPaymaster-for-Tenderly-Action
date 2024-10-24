@@ -351,6 +351,42 @@ const notifyDiscord = async (
   }
 };
 
+// Sends notifications to Slack webhook
+const notifySlack = async (
+  text: string,
+  content: string,
+  webhookLink?: string
+) => {
+  if (!webhookLink) {
+    console.error(`Slack webhook link not found`);
+    return;
+  }
+
+  const slackText = `🐥 ${text}:\n${content}`;
+
+  const payload = {
+    username: "webhookbot",
+    text: slackText,
+    icon_emoji: ":eye:",
+  };
+
+  console.log(`Sending to Slack: ${slackText}`);
+
+  try {
+    // Send message to Slack
+    const response = await axios.post(webhookLink, payload);
+
+    // Throw error if response status is not 204
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to send Slack notification: ${response.statusText}`
+      );
+    }
+  } catch (error) {
+    console.error(`Error sending Slack notification: ${error}`);
+  }
+};
+
 // Append a value to a JSON array in Tenderly Web3 Action storage
 const pushToStorage = async (context: Context, key: string, value: any) => {
   let jsonData = await context.storage.getJson(key);
@@ -395,8 +431,12 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
 
   // Configure secret: https://dashboard.tenderly.co/IraraChen/monitoring/actions/secrets
   // Example: DISCORD_PAYMASTER_CHANNEL_WEBHOOK=https://discord.com/api/webhooks/xxx/xxx
+  // Example: SLACK_PAYMASTER_CHANNEL_WEBHOOK=https://hooks.slack.com/services/xxx/xxx/xxx
   const discordWebhookLink = await context.secrets.get(
     "DISCORD_PAYMASTER_CHANNEL_WEBHOOK"
+  );
+  const slackWebhookLink = await context.secrets.get(
+    "SLACK_PAYMASTER_CHANNEL_WEBHOOK"
   );
 
   console.log(discordWebhookLink);
@@ -452,7 +492,7 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
 
       const transactionHash = transactionEvent.hash;
       const sender = userOpProcessedLog.userOpSender;
-      const text = `Transaction ${transactionHash} with UserOpProcessed() event and userOpHash ${
+      const text = `Transaction https://jiffyscan.xyz/bundle/${transactionHash} with UserOpProcessed() event and userOpHash https://jiffyscan.xyz/userOpHash/${
         userOpProcessedLog.userOpHash
       } failed to collect charges from sender ${sender} in ChargeInPostOp mode under OffChainPaymaster ${
         paymasters[userOpProcessedLog.userOpHash]
@@ -463,6 +503,13 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
         text,
         jsonStringify(userOpProcessedLog),
         discordWebhookLink
+      );
+
+      // Notify Slack with the post-operation revert
+      await notifySlack(
+        text,
+        jsonStringify(userOpProcessedLog),
+        slackWebhookLink
       );
     }
   }
@@ -480,7 +527,7 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
 
     const transactionHash = transactionEvent.hash;
     const sender = postOpRevertReasonLog.sender;
-    const text = `Transaction ${transactionHash} with PostOpRevertReason() event and userOpHash ${
+    const text = `Transaction https://jiffyscan.xyz/bundle/${transactionHash} with PostOpRevertReason() event and userOpHash https://jiffyscan.xyz/userOpHash/${
       postOpRevertReasonLog.userOpHash
     } was reverted for sender ${sender} during ChargeInPostOp mode under OffChainPaymaster ${
       paymasters[postOpRevertReasonLog.userOpHash]
@@ -491,6 +538,13 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
       text,
       jsonStringify(postOpRevertReasonLog),
       discordWebhookLink
+    );
+
+    // Notify Slack with the post-operation revert
+    await notifySlack(
+      text,
+      jsonStringify(postOpRevertReasonLog),
+      slackWebhookLink
     );
   }
 

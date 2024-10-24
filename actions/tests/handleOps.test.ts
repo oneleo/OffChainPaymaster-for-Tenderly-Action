@@ -19,6 +19,7 @@ describe("TicTacToeActions", () => {
     ]);
 
     testRuntime.context.secrets.put("DISCORD_PAYMASTER_CHANNEL_WEBHOOK", "");
+    testRuntime.context.secrets.put("SLACK_PAYMASTER_CHANNEL_WEBHOOK", "");
 
     await testRuntime.execute(actionFn, handleOpsPayload);
 
