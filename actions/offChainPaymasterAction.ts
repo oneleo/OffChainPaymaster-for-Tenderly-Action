@@ -18,8 +18,9 @@ const userOperationEventId = hexlify(
 
 // Identifier for PostOpRevertReason event
 // = keccak256(abi.encodePacked("PostOpRevertReason(bytes32,address,uint256,bytes)"))
-const postOpRevertReasonId =
-  "0xf62676f440ff169a3a9afdbf812e89e7f95975ee8e5c31214ffdef631c5f4792";
+const postOpRevertReasonId = hexlify(
+  "0xf62676f440ff169a3a9afdbf812e89e7f95975ee8e5c31214ffdef631c5f4792"
+);
 
 // Identifier for UserOpProcessed event
 // = keccak256(abi.encodePacked("UserOpProcessed(bytes32,address,bytes32,uint8,uint256,address,uint256,address,bool)"))
@@ -435,11 +436,11 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
   const discordWebhookLink = await context.secrets.get(
     "DISCORD_PAYMASTER_CHANNEL_WEBHOOK"
   );
+  console.log(`discordWebhookLink: ${discordWebhookLink}`);
   const slackWebhookLink = await context.secrets.get(
     "SLACK_PAYMASTER_CHANNEL_WEBHOOK"
   );
-
-  console.log(discordWebhookLink);
+  console.log(`slackWebhookLink: ${slackWebhookLink}`);
 
   // Cast event to TransactionEvent type
   const transactionEvent = event as TransactionEvent;
@@ -492,7 +493,7 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
 
       const transactionHash = transactionEvent.hash;
       const sender = userOpProcessedLog.userOpSender;
-      const text = `Transaction https://jiffyscan.xyz/bundle/${transactionHash} with UserOpProcessed() event and userOpHash https://jiffyscan.xyz/userOpHash/${
+      const text = `(Tenderly Web3 Actions) Transaction https://jiffyscan.xyz/bundle/${transactionHash} with UserOpProcessed() event and userOpHash https://jiffyscan.xyz/userOpHash/${
         userOpProcessedLog.userOpHash
       } failed to collect charges from sender ${sender} in ChargeInPostOp mode under OffChainPaymaster ${
         paymasters[userOpProcessedLog.userOpHash]
@@ -527,7 +528,7 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
 
     const transactionHash = transactionEvent.hash;
     const sender = postOpRevertReasonLog.sender;
-    const text = `Transaction https://jiffyscan.xyz/bundle/${transactionHash} with PostOpRevertReason() event and userOpHash https://jiffyscan.xyz/userOpHash/${
+    const text = `(Tenderly Web3 Actions) Transaction https://jiffyscan.xyz/bundle/${transactionHash} with PostOpRevertReason() event and userOpHash https://jiffyscan.xyz/userOpHash/${
       postOpRevertReasonLog.userOpHash
     } was reverted for sender ${sender} during ChargeInPostOp mode under OffChainPaymaster ${
       paymasters[postOpRevertReasonLog.userOpHash]
