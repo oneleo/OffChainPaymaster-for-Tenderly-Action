@@ -12,11 +12,22 @@ describe("TicTacToeActions", () => {
   it("new game", async () => {
     const testRuntime = new TestRuntime();
 
-    await testRuntime.context.storage.putJson("MONITORED_PAYMASTER_ADDRESSES", [
+    const monitoredPaymasterAddress = [
       "0x44D6f8362c144A1217f24A11bE35f2c418B6cb20",
       "0xBDd6EB5C9A89f21B559f65C6b2bbeC265cE54C82",
       "0x4779C973b060c9cc1592b404cAd9CB5AFB0d4B52",
-    ]);
+    ];
+    const monitoredPaymasterAddressToStorage = JSON.stringify(
+      monitoredPaymasterAddress
+    );
+    console.warn(
+      `monitoredPaymasterAddressToStorage:【${monitoredPaymasterAddressToStorage}】`
+    );
+
+    await testRuntime.context.storage.putStr(
+      "MONITORED_PAYMASTER_ADDRESSES",
+      monitoredPaymasterAddressToStorage
+    );
 
     testRuntime.context.secrets.put("DISCORD_PAYMASTER_CHANNEL_WEBHOOK", "");
     testRuntime.context.secrets.put("SLACK_PAYMASTER_CHANNEL_WEBHOOK", "");

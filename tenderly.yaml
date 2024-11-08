@@ -18,6 +18,66 @@ actions:
             status:
               - mined
             filters:
+              - network: 10
+                # Transaction must come from the network with network ID 10 Optimism
+                status: success
+                # Transaction must have succeeded
+                to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                # Transaction must have been sent to EntryPoint contract
+                logEmitted:
+                  # Transaction must have emitted a log entry
+                  contract:
+                    address: 0xf67f1bB6817a138eD3C8f383a35B98D695f7E12c
+                    # coming from the OffChainPaymaster contract at this address
+                  startsWith:
+                    # and topics of the log entry must start with either one of these
+                    - 0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9
+                    # UserOpProcessed(bytes32,address,bytes32,uint8,uint256,address,uint256,address,bool)
+              - network: 10
+                # Transaction must come from the network with network ID 10 Optimism
+                status: success
+                # Transaction must have succeeded
+                to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                # Transaction must have been sent to EntryPoint contract
+                logEmitted:
+                  # Transaction must have emitted a log entry
+                  contract:
+                    address: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                    # coming from the EntryPoint contract at this address
+                  startsWith:
+                    # and topics of the log entry must start with either one of these
+                    - 0xf62676f440ff169a3a9afdbf812e89e7f95975ee8e5c31214ffdef631c5f4792
+                    # PostOpRevertReason(bytes32,address,uint256,bytes)
+              - network: 42161
+                # Transaction must come from the network with network ID 42161 Arbitrum
+                status: success
+                # Transaction must have succeeded
+                to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                # Transaction must have been sent to EntryPoint contract
+                logEmitted:
+                  # Transaction must have emitted a log entry
+                  contract:
+                    address: 0xf67f1bB6817a138eD3C8f383a35B98D695f7E12c
+                    # coming from the OffChainPaymaster contract at this address
+                  startsWith:
+                    # and topics of the log entry must start with either one of these
+                    - 0x4a7d89094dad8258a8c7f96c6cad9b077fe57305ac3e2da96478295d1b48c7d9
+                    # UserOpProcessed(bytes32,address,bytes32,uint8,uint256,address,uint256,address,bool)
+              - network: 42161
+                # Transaction must come from the network with network ID 42161 Arbitrum
+                status: success
+                # Transaction must have succeeded
+                to: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                # Transaction must have been sent to EntryPoint contract
+                logEmitted:
+                  # Transaction must have emitted a log entry
+                  contract:
+                    address: 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+                    # coming from the EntryPoint contract at this address
+                  startsWith:
+                    # and topics of the log entry must start with either one of these
+                    - 0xf62676f440ff169a3a9afdbf812e89e7f95975ee8e5c31214ffdef631c5f4792
+                    # PostOpRevertReason(bytes32,address,uint256,bytes)
               - network: 11155111
                 # Transaction must come from the network with network ID 11155111 Sepolia
                 status: success
@@ -117,7 +177,7 @@ actions:
                 logEmitted:
                   # Transaction must have emitted a log entry
                   contract:
-                    address: 0x1833bC4f1e2F33F3eE40e08fA55C26ce9C218Bcf
+                    address: 0xe3FA5B3378d30c9870Fda4249A0d6E4637d760B3
                     # coming from the OffChainPaymaster contract at this address
                   startsWith:
                     # and topics of the log entry must start with either one of these
