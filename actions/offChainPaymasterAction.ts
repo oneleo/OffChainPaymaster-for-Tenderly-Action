@@ -389,14 +389,14 @@ const notifySlack = async (
 };
 
 // Append a value to a JSON array in Tenderly Web3 Action storage
-const pushToStorage = async (context: Context, key: string, value: any) => {
-  let jsonData = await context.storage.getJson(key);
-  if (jsonData && Object.keys(jsonData).length === 0) {
-    jsonData = [];
-  }
-  jsonData.push(JSON.parse(jsonStringify(value)));
-  await context.storage.putJson(key, jsonData);
-};
+// const pushToStorage = async (context: Context, key: string, value: any) => {
+//   let jsonData = await context.storage.getJson(key);
+//   if (jsonData && Object.keys(jsonData).length === 0) {
+//     jsonData = [];
+//   }
+//   jsonData.push(JSON.parse(jsonStringify(value)));
+//   await context.storage.putJson(key, jsonData);
+// };
 
 // Do not change function name.
 export const actionFn: ActionFn = async (context: Context, event: Event) => {
@@ -485,11 +485,19 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
     }
 
     if (userOpProcessedLog.chargeSuccessful) {
-      await pushToStorage(context, "ChargeInPostOpSuccess", userOpProcessedLog);
+      //   await pushToStorage(context, "ChargeInPostOpSuccess", userOpProcessedLog);
+      await context.storage.putJson(
+        "ChargeInPostOpSuccess",
+        JSON.parse(jsonStringify(userOpProcessedLog))
+      );
     }
 
     if (!userOpProcessedLog.chargeSuccessful) {
-      await pushToStorage(context, "ChargeInPostOpFail", userOpProcessedLog);
+      //   await pushToStorage(context, "ChargeInPostOpFail", userOpProcessedLog);
+      await context.storage.putJson(
+        "ChargeInPostOpFail",
+        JSON.parse(jsonStringify(userOpProcessedLog))
+      );
 
       const transactionHash = transactionEvent.hash;
       const sender = userOpProcessedLog.userOpSender;
@@ -524,7 +532,11 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
 
   // Process each user operation processed log
   for (const postOpRevertReasonLog of postOpRevertReasonLogs) {
-    await pushToStorage(context, "PostOpRevertReason", postOpRevertReasonLog);
+    // await pushToStorage(context, "PostOpRevertReason", postOpRevertReasonLog);
+    await context.storage.putJson(
+      "PostOpRevertReason",
+      JSON.parse(jsonStringify(postOpRevertReasonLog))
+    );
 
     const transactionHash = transactionEvent.hash;
     const sender = postOpRevertReasonLog.sender;

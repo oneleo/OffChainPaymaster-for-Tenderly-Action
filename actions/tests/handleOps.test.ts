@@ -8,8 +8,8 @@ import {
 } from "../offChainPaymasterAction";
 import { handleOpsPayload } from "./fixtures/handleOpsPayload";
 
-describe("TicTacToeActions", () => {
-  it("new game", async () => {
+describe("OffChainPaymasterActions", () => {
+  it("New event", async () => {
     const testRuntime = new TestRuntime();
 
     const monitoredPaymasterAddress = [
@@ -34,19 +34,19 @@ describe("TicTacToeActions", () => {
 
     await testRuntime.execute(actionFn, handleOpsPayload);
 
-    const chargeInPostOpSuccess: UserOpProcessedEventParams[] =
+    const chargeInPostOpSuccess: UserOpProcessedEventParams =
       await testRuntime.context.storage.getJson("ChargeInPostOpSuccess");
 
-    expect(chargeInPostOpSuccess[0].chargeSuccessful).to.eq(true);
+    expect(chargeInPostOpSuccess.chargeSuccessful).to.eq(true);
 
-    const chargeInPostOpFail: UserOpProcessedEventParams[] =
+    const chargeInPostOpFail: UserOpProcessedEventParams =
       await testRuntime.context.storage.getJson("ChargeInPostOpFail");
 
-    expect(chargeInPostOpFail[0].chargeSuccessful).to.eq(false);
+    expect(chargeInPostOpFail.chargeSuccessful).to.eq(false);
 
-    const postOpRevertReason: PostOpRevertReasonEventParams[] =
+    const postOpRevertReason: PostOpRevertReasonEventParams =
       await testRuntime.context.storage.getJson("PostOpRevertReason");
 
-    expect(postOpRevertReason[0].revertReason.error).to.eq("CanNotChargeFrom");
+    expect(postOpRevertReason.revertReason.error).to.eq("CanNotChargeFrom");
   });
 });
