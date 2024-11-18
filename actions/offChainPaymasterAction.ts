@@ -6,9 +6,21 @@ import {
   Log,
 } from "@tenderly/actions";
 
-import { getAddress, AbiCoder, hexlify, Interface, dataSlice } from "ethers";
+import {
+  toBigInt,
+  getAddress,
+  AbiCoder,
+  hexlify,
+  Interface,
+  dataSlice,
+  Contract,
+  JsonRpcProvider,
+} from "ethers";
 
 import axios from "axios";
+
+// Alarm amount
+const alarmDepositAmount = 200000000000000000n;
 
 // Identifier for UserOperationEvent event
 // = keccak256(abi.encodePacked("UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)"))
@@ -311,6 +323,77 @@ const parseUserOpProcessedEvents = (params: {
   return decodedUserOpProcessedEvents;
 };
 
+// Gets writeContract scan URL for a given chain ID and address
+const getAddressScanUrl = (
+  chainId: number,
+  paymasterAddress: string
+): string => {
+  const baseUrls: Record<number, string> = {
+    1: `https://etherscan.io/address/`,
+    10: `https://optimistic.etherscan.io/address/`,
+    42161: `https://arbiscan.io/address/`,
+    11155111: `https://sepolia.etherscan.io/address/`,
+    11155420: `https://sepolia-optimism.etherscan.io/address/`,
+    84532: `https://sepolia.basescan.org/address/`,
+    421614: `https://sepolia.arbiscan.io/address/`,
+  };
+
+  return baseUrls[chainId]
+    ? `${baseUrls[chainId]}${paymasterAddress}#writeContract#F2`
+    : `Unknown`;
+};
+
+// Gets RPC URL based on chain ID and API key
+const getRpcUrl = (chainId: number, alchemyApiKey: string): string | null => {
+  const baseUrls: Record<number, string> = {
+    1: `https://eth-mainnet.g.alchemy.com/v2/`,
+    10: `https://opt-mainnet.g.alchemy.com/v2/`,
+    42161: `https://arb-mainnet.g.alchemy.com/v2/`,
+    11155111: `https://eth-sepolia.g.alchemy.com/v2/`,
+    11155420: `https://opt-sepolia.g.alchemy.com/v2/`,
+    84532: `https://base-sepolia.g.alchemy.com/v2/`,
+    421614: `https://arb-sepolia.g.alchemy.com/v2/`,
+  };
+
+  return baseUrls[chainId] ? `${baseUrls[chainId]}${alchemyApiKey}` : null;
+};
+
+// Gets token balance and decimals using the Alchemy API
+const getDeposit = async (
+  chainId: number,
+  paymasterAddress: string,
+  alchemyApiKey?: string
+): Promise<bigint | null> => {
+  if (!alchemyApiKey) {
+    console.error(`Alchemy api key not found`);
+    return null;
+  }
+
+  const rpcUrl = getRpcUrl(chainId, alchemyApiKey);
+
+  if (!rpcUrl) {
+    console.error(`Can not get deposit: chainId not found`);
+    return null;
+  }
+
+  const provider = new JsonRpcProvider(rpcUrl);
+
+  const basePaymasterContract = new Contract(
+    paymasterAddress,
+    ["function getDeposit() public view returns (uint256)"],
+    provider
+  );
+
+  try {
+    const balance = toBigInt(await basePaymasterContract.getDeposit());
+
+    return balance;
+  } catch (error) {
+    console.error(`Failed to get deposit: ${error}`);
+    return null;
+  }
+};
+
 // Sends notifications to Discord webhook
 const notifyDiscord = async (
   text: string,
@@ -442,12 +525,17 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
   );
   console.log(`slackWebhookLink: ${slackWebhookLink}`);
 
+  const alchemyApiKey = await context.secrets.get("ALCHEMY_API_KEY");
+  console.log(`alchemyApiKey: ${alchemyApiKey}`);
+
   // Cast event to TransactionEvent type
   const transactionEvent = event as TransactionEvent;
   if (transactionEvent.hash === undefined) {
     return;
   }
 
+  const chainId = parseInt(transactionEvent.network);
+  console.log(`chainId: ${chainId}`);
   // Process transaction event
   const logs = transactionEvent.logs as Log[];
 
@@ -484,6 +572,43 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
       continue;
     }
 
+    const paymasterAddress = paymasters[userOpProcessedLog.userOpHash];
+
+    const depositAmount = await getDeposit(
+      chainId,
+      paymasterAddress,
+      alchemyApiKey
+    );
+    if (depositAmount === null) {
+      const text = `(Tenderly) Rpc error: unable to retrieve OffChainPaymaster's deposit on ${chainId}, triggered by UserOpProcessed in: https://v2.jiffyscan.xyz/userOpHash/${userOpProcessedLog.userOpHash} .`;
+
+      console.error(`text: ${text}`);
+
+      // Notify Discord
+      await notifyDiscord(text, "", discordWebhookLink);
+
+      // Notify Slack
+      await notifySlack(text, "", slackWebhookLink);
+    }
+
+    const paymasterOnScan = getAddressScanUrl(chainId, paymasterAddress);
+
+    console.log(`paymasterOnScan: ${paymasterOnScan}`);
+    console.log(`depositAmount: ${depositAmount}`);
+    console.log(`alarmDepositAmount: ${alarmDepositAmount}`);
+
+    if (depositAmount && depositAmount <= alarmDepositAmount) {
+      const text = `(Tenderly) OffChainPaymaster's deposit (${depositAmount}) on ${chainId} ( (chainId)) is fell below threshold (${alarmDepositAmount}), you can deposit here: ${paymasterOnScan} !`;
+
+      console.warn(`text: ${text}`);
+
+      // Notify Discord
+      await notifyDiscord(text, "", discordWebhookLink);
+
+      // Notify Slack
+      await notifySlack(text, "", slackWebhookLink);
+    }
+
     if (userOpProcessedLog.chargeSuccessful) {
       //   await pushToStorage(context, "ChargeInPostOpSuccess", userOpProcessedLog);
       await context.storage.putJson(
@@ -501,25 +626,17 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
 
       const transactionHash = transactionEvent.hash;
       const sender = userOpProcessedLog.userOpSender;
-      const text = `(Tenderly Web3 Actions) Transaction https://jiffyscan.xyz/bundle/${transactionHash} with UserOpProcessed() event and userOpHash https://jiffyscan.xyz/userOpHash/${
+      const text = `(Tenderly Web3 Actions) Transaction https://v2.jiffyscan.xyz/bundle/${transactionHash} with UserOpProcessed() event and userOpHash https://v2.jiffyscan.xyz/userOpHash/${
         userOpProcessedLog.userOpHash
       } failed to collect charges from sender ${sender} in ChargeInPostOp mode under OffChainPaymaster ${
         paymasters[userOpProcessedLog.userOpHash]
       }. Please check for any potential misconduct by sender.`;
 
       // Notify Discord with the post-operation revert
-      await notifyDiscord(
-        text,
-        jsonStringify(userOpProcessedLog),
-        discordWebhookLink
-      );
+      await notifyDiscord(text, "", discordWebhookLink);
 
       // Notify Slack with the post-operation revert
-      await notifySlack(
-        text,
-        jsonStringify(userOpProcessedLog),
-        slackWebhookLink
-      );
+      await notifySlack(text, "", slackWebhookLink);
     }
   }
 
@@ -547,18 +664,10 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
     }. Please check for any potential misconduct by the sender.`;
 
     // Notify Discord with the post-operation revert
-    await notifyDiscord(
-      text,
-      jsonStringify(postOpRevertReasonLog),
-      discordWebhookLink
-    );
+    await notifyDiscord(text, "", discordWebhookLink);
 
     // Notify Slack with the post-operation revert
-    await notifySlack(
-      text,
-      jsonStringify(postOpRevertReasonLog),
-      slackWebhookLink
-    );
+    await notifySlack(text, "", slackWebhookLink);
   }
 
   console.log(`Tenderly Web3 Action script completed`);
