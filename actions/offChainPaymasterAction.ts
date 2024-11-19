@@ -19,8 +19,15 @@ import {
 
 import axios from "axios";
 
-// Alarm amount
-const alarmDepositAmount = 200000000000000000n;
+enum ChainId {
+  Mainnet = 1,
+  OptimismMainnet = 10,
+  ArbitrumOne = 42161,
+  BaseSepolia = 84532,
+  ArbitrumSepolia = 421614,
+  Sepolia = 11155111,
+  OptimismSepolia = 11155420,
+}
 
 // Identifier for UserOperationEvent event
 // = keccak256(abi.encodePacked("UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)"))
@@ -323,36 +330,78 @@ const parseUserOpProcessedEvents = (params: {
   return decodedUserOpProcessedEvents;
 };
 
+// Gets network name based on chain ID
+const getAlarmDepositAmount = (chainId: number): bigint => {
+  const alarmDepositAmount: Record<number, number> = {
+    [ChainId.Mainnet]: 0.0002,
+    [ChainId.OptimismMainnet]: 0.02, // 0.02
+    [ChainId.ArbitrumOne]: 0.2, // 0.2
+    [ChainId.BaseSepolia]: 0.02,
+    [ChainId.ArbitrumSepolia]: 0.2,
+    [ChainId.Sepolia]: 0.0002,
+    [ChainId.OptimismSepolia]: 0.02,
+  };
+
+  return BigInt((alarmDepositAmount[chainId] ?? 0.0002) * 10 ** 18);
+};
+
+// Formats the token balance with decimal precision
+const formatTokenBalance = (balance: bigint, decimals: number): string => {
+  const integerPart = balance / 10n ** BigInt(decimals);
+  const decimalPart = balance % 10n ** BigInt(decimals);
+
+  const formattedBalance = `${integerPart}.${decimalPart
+    .toString()
+    .padStart(Number(decimals), "0")}`;
+
+  return formattedBalance;
+};
+
+// Gets network name based on chain ID
+const getNetworkName = (chainId: number): string => {
+  const baseNames: Record<number, string> = {
+    [ChainId.Mainnet]: `Mainnet`,
+    [ChainId.OptimismMainnet]: `Optimism`,
+    [ChainId.ArbitrumOne]: `Arbitrum One`,
+    [ChainId.BaseSepolia]: `Base Sepolia Testnet`,
+    [ChainId.ArbitrumSepolia]: `Arbitrum Sepolia Testnet`,
+    [ChainId.Sepolia]: `Sepolia Testnet`,
+    [ChainId.OptimismSepolia]: `Optimism Sepolia Testnet`,
+  };
+
+  return baseNames[chainId] ?? `Unknown network`;
+};
+
 // Gets writeContract scan URL for a given chain ID and address
 const getAddressScanUrl = (
   chainId: number,
   paymasterAddress: string
 ): string => {
   const baseUrls: Record<number, string> = {
-    1: `https://etherscan.io/address/`,
-    10: `https://optimistic.etherscan.io/address/`,
-    42161: `https://arbiscan.io/address/`,
-    11155111: `https://sepolia.etherscan.io/address/`,
-    11155420: `https://sepolia-optimism.etherscan.io/address/`,
-    84532: `https://sepolia.basescan.org/address/`,
-    421614: `https://sepolia.arbiscan.io/address/`,
+    [ChainId.Mainnet]: `https://etherscan.io/address/`,
+    [ChainId.OptimismMainnet]: `https://optimistic.etherscan.io/address/`,
+    [ChainId.ArbitrumOne]: `https://arbiscan.io/address/`,
+    [ChainId.BaseSepolia]: `https://sepolia.basescan.org/address/`,
+    [ChainId.ArbitrumSepolia]: `https://sepolia.arbiscan.io/address/`,
+    [ChainId.Sepolia]: `https://sepolia.etherscan.io/address/`,
+    [ChainId.OptimismSepolia]: `https://sepolia-optimism.etherscan.io/address/`,
   };
 
   return baseUrls[chainId]
-    ? `${baseUrls[chainId]}${paymasterAddress}#writeContract#F2`
+    ? `${baseUrls[chainId]}${paymasterAddress}#writeContract`
     : `Unknown`;
 };
 
 // Gets RPC URL based on chain ID and API key
 const getRpcUrl = (chainId: number, alchemyApiKey: string): string | null => {
   const baseUrls: Record<number, string> = {
-    1: `https://eth-mainnet.g.alchemy.com/v2/`,
-    10: `https://opt-mainnet.g.alchemy.com/v2/`,
-    42161: `https://arb-mainnet.g.alchemy.com/v2/`,
-    11155111: `https://eth-sepolia.g.alchemy.com/v2/`,
-    11155420: `https://opt-sepolia.g.alchemy.com/v2/`,
-    84532: `https://base-sepolia.g.alchemy.com/v2/`,
-    421614: `https://arb-sepolia.g.alchemy.com/v2/`,
+    [ChainId.Mainnet]: `https://eth-mainnet.g.alchemy.com/v2/`,
+    [ChainId.OptimismMainnet]: `https://opt-mainnet.g.alchemy.com/v2/`,
+    [ChainId.ArbitrumOne]: `https://arb-mainnet.g.alchemy.com/v2/`,
+    [ChainId.BaseSepolia]: `https://base-sepolia.g.alchemy.com/v2/`,
+    [ChainId.ArbitrumSepolia]: `https://arb-sepolia.g.alchemy.com/v2/`,
+    [ChainId.Sepolia]: `https://eth-sepolia.g.alchemy.com/v2/`,
+    [ChainId.OptimismSepolia]: `https://opt-sepolia.g.alchemy.com/v2/`,
   };
 
   return baseUrls[chainId] ? `${baseUrls[chainId]}${alchemyApiKey}` : null;
@@ -591,14 +640,22 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
       await notifySlack(text, "", slackWebhookLink);
     }
 
+    const alarmDepositAmount = getAlarmDepositAmount(chainId);
     const paymasterOnScan = getAddressScanUrl(chainId, paymasterAddress);
+    const networkName = getNetworkName(chainId);
 
     console.log(`paymasterOnScan: ${paymasterOnScan}`);
-    console.log(`depositAmount: ${depositAmount}`);
-    console.log(`alarmDepositAmount: ${alarmDepositAmount}`);
+    console.log(`depositAmount:\t${depositAmount}`);
+    console.log(`alarmAmount:\t${alarmDepositAmount}`);
 
     if (depositAmount && depositAmount <= alarmDepositAmount) {
-      const text = `(Tenderly) OffChainPaymaster's deposit (${depositAmount}) on ${chainId} ( (chainId)) is fell below threshold (${alarmDepositAmount}), you can deposit here: ${paymasterOnScan} !`;
+      const formatDepositAmount = formatTokenBalance(depositAmount, 18);
+      const formatAlarmDepositAmount = formatTokenBalance(
+        alarmDepositAmount,
+        18
+      );
+
+      const text = `(Tenderly) OffChainPaymaster's deposit (${formatDepositAmount} ETH) on ${networkName} is fell below threshold (${formatAlarmDepositAmount} ETH), you can deposit here: ${paymasterOnScan} !`;
 
       console.warn(`text: ${text}`);
 
