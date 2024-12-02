@@ -51,7 +51,7 @@ describe("OffChainPaymasterActions", () => {
       monitoredPaymasterAddressToStorage
     );
 
-    testRuntime.context.secrets.put("ALCHEMY_API_KEY", "");
+    testRuntime.context.secrets.put("ALCHEMY_API_KEY", alchemyApiKey);
     testRuntime.context.secrets.put(
       "DISCORD_PAYMASTER_CHANNEL_WEBHOOK",
       discordWebhookLink

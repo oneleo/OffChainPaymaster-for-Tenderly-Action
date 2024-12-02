@@ -373,10 +373,7 @@ const getNetworkName = (chainId: number): string => {
 };
 
 // Gets writeContract scan URL for a given chain ID and address
-const getAddressScanUrl = (
-  chainId: number,
-  paymasterAddress: string
-): string => {
+const getAddressScanUrl = (chainId: number, address: string): string => {
   const baseUrls: Record<number, string> = {
     [ChainId.Mainnet]: `https://etherscan.io/address/`,
     [ChainId.OptimismMainnet]: `https://optimistic.etherscan.io/address/`,
@@ -388,7 +385,27 @@ const getAddressScanUrl = (
   };
 
   return baseUrls[chainId]
-    ? `${baseUrls[chainId]}${paymasterAddress}#writeContract`
+    ? `${baseUrls[chainId]}${address}#writeContract`
+    : `Unknown`;
+};
+
+// Gets transaction scan URL for a given chain ID and address
+const getTransactionScanUrl = (
+  chainId: number,
+  transactionHash: string
+): string => {
+  const baseUrls: Record<number, string> = {
+    [ChainId.Mainnet]: `https://etherscan.io/tx/`,
+    [ChainId.OptimismMainnet]: `https://optimistic.etherscan.io/tx/`,
+    [ChainId.ArbitrumOne]: `https://arbiscan.io/tx/`,
+    [ChainId.BaseSepolia]: `https://sepolia.basescan.org/tx/`,
+    [ChainId.ArbitrumSepolia]: `https://sepolia.arbiscan.io/tx/`,
+    [ChainId.Sepolia]: `https://sepolia.etherscan.io/tx/`,
+    [ChainId.OptimismSepolia]: `https://sepolia-optimism.etherscan.io/tx/`,
+  };
+
+  return baseUrls[chainId]
+    ? `${baseUrls[chainId]}${transactionHash}#eventlog`
     : `Unknown`;
 };
 
@@ -445,8 +462,8 @@ const getDeposit = async (
 
 // Sends notifications to Discord webhook
 const notifyDiscord = async (
+  title: string,
   text: string,
-  content: string,
   webhookLink?: string
 ) => {
   if (!webhookLink) {
@@ -454,7 +471,7 @@ const notifyDiscord = async (
     return;
   }
 
-  const discordText = `🐥 ${text}:\n${content}`;
+  const discordText = `${title}\n${text}`;
 
   const data = {
     content: `${discordText}`,
@@ -486,8 +503,8 @@ const notifyDiscord = async (
 
 // Sends notifications to Slack webhook
 const notifySlack = async (
+  title: string,
   text: string,
-  content: string,
   webhookLink?: string
 ) => {
   if (!webhookLink) {
@@ -495,19 +512,37 @@ const notifySlack = async (
     return;
   }
 
-  const slackText = `🐥 ${text}:\n${content}`;
-
   const payload = {
-    username: "webhookbot",
-    text: slackText,
-    icon_emoji: ":eye:",
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `${title}`,
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `${text}`,
+        },
+      },
+    ],
   };
 
-  console.log(`Sending to Slack: ${slackText}`);
+  const config = {
+    headers: {
+      "Content-type": "application/json",
+    },
+  };
+
+  console.log(`Sending to Slack: ${title}\n${text}`);
 
   try {
     // Send message to Slack
-    const response = await axios.post(webhookLink, payload);
+    const response = await axios.post(webhookLink, payload, config);
+    console.log(`response.status: ${response.status}`);
 
     // Throw error if response status is not 204
     if (response.status !== 200) {
@@ -584,7 +619,12 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
   }
 
   const chainId = parseInt(transactionEvent.network);
+  const networkName = getNetworkName(chainId);
+  const transactionHash = transactionEvent.hash;
+  const transactionOnScan = getTransactionScanUrl(chainId, transactionHash);
+
   console.log(`chainId: ${chainId}`);
+
   // Process transaction event
   const logs = transactionEvent.logs as Log[];
 
@@ -621,28 +661,31 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
       continue;
     }
 
-    const paymasterAddress = paymasters[userOpProcessedLog.userOpHash];
+    const userOpHash = userOpProcessedLog.userOpHash;
+    const paymasterAddress = paymasters[userOpHash];
+    const paymasterOnScan = getAddressScanUrl(chainId, paymasterAddress);
 
     const depositAmount = await getDeposit(
       chainId,
       paymasterAddress,
       alchemyApiKey
     );
-    if (depositAmount === null) {
-      const text = `(Tenderly) Rpc error: unable to retrieve OffChainPaymaster's deposit on ${chainId}, triggered by UserOpProcessed in: https://v2.jiffyscan.xyz/userOpHash/${userOpProcessedLog.userOpHash} .`;
 
-      console.error(`text: ${text}`);
+    if (depositAmount === null) {
+      const title = `*_(Tenderly) Error with Alchemy RPC URL 🌐_*`;
+
+      const text = `*[Description]*\n\tUnable to retrieve OffChainPaymaster's deposits value on the ${networkName}.\n*[Impact]*\n\tUnable to assess if deposits fall below the threshold, creating potential risks.\n*[Action Needed]*\n\t1. Check if the Alchemy RPC service is down.\n\t2. Verify API key usage limit.\n\t3. Check on-chain transaction for deposit threshold breach.\n*[Details]*\n\t1. OffChainPaymaster address: <${paymasterOnScan}|${paymasterAddress}>.\n\t2. Deployment documents: <https://imtoken.atlassian.net/wiki/spaces/UED/pages/1634828293/Tenderly+Web3+Actions+OffChainPaymaster#5、設置-Alchemy-API-Key-至-SECRET|Tenderly>, <https://imtoken.atlassian.net/wiki/spaces/UED/pages/1653407817/OpenZeppelin+Defender+Actions+OffChainPaymaster#3%E3%80%81%E8%A8%AD%E7%BD%AE-Discord%EF%BC%8FSlack-webhook-URL%EF%BC%8FAlchemy-API-Key%E3%80%81Paymasters-addresses-%E8%87%B3-SECRET|OpenZeppelin>.\n*[Contact]*\n\t1. Irara: <@U03HEAQL36X>\n\t2. Jiahui: <@U03TKT79H7V>\n\t3. Nic: <@U01DV7XCYA3>\n*[Triggered by]*\n\tTransaction: <${transactionOnScan}|${transactionHash}>.`;
+
+      console.error(`title & text: ${title}\n${text}`);
 
       // Notify Discord
-      await notifyDiscord(text, "", discordWebhookLink);
+      await notifyDiscord(title, text, discordWebhookLink);
 
       // Notify Slack
-      await notifySlack(text, "", slackWebhookLink);
+      await notifySlack(title, text, slackWebhookLink);
     }
 
     const alarmDepositAmount = getAlarmDepositAmount(chainId);
-    const paymasterOnScan = getAddressScanUrl(chainId, paymasterAddress);
-    const networkName = getNetworkName(chainId);
 
     console.log(`paymasterOnScan: ${paymasterOnScan}`);
     console.log(`depositAmount:\t${depositAmount}`);
@@ -655,15 +698,16 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
         18
       );
 
-      const text = `(Tenderly) OffChainPaymaster's deposit (${formatDepositAmount} ETH) on ${networkName} is fell below threshold (${formatAlarmDepositAmount} ETH), you can deposit here: ${paymasterOnScan} !`;
+      const title = `*_(Tenderly) OffChainPaymaster Low ETH Deposits Alert 🚨_*`;
+      const text = `*[Description]*\n\tThe OffChainPaymaster deposits is now ${formatDepositAmount} ETH, below the ${formatAlarmDepositAmount} ETH safe threshold on the ${networkName}.\n*[Impact]*\n\tPayments for new transactions might fail.\n*[Action Needed]*\n\tAdd at least ${formatAlarmDepositAmount} ETH to the Paymaster address.\n*[Details]*\n\t1. OffChainPaymaster address: <${paymasterOnScan}|${paymasterAddress}>.\n\t2. Documents: <https://imtoken.atlassian.net/wiki/spaces/UED/pages/1661435953/imToken+Paymaster#Paymaster-%E5%90%88%E7%BA%A6|Paymaster contract>\n*[Contact]*\n\t1. Jiahui: <@U03TKT79H7V>\n\t2. Nic: <@U01DV7XCYA3>\n\t3. Irara: <@U03HEAQL36X>\n*[Triggered by]*\n\tTransaction: <${transactionOnScan}|${transactionHash}>.`;
 
-      console.warn(`text: ${text}`);
+      console.warn(`title & text: ${title}\n${text}`);
 
       // Notify Discord
-      await notifyDiscord(text, "", discordWebhookLink);
+      await notifyDiscord(title, text, discordWebhookLink);
 
       // Notify Slack
-      await notifySlack(text, "", slackWebhookLink);
+      await notifySlack(title, text, slackWebhookLink);
     }
 
     if (userOpProcessedLog.chargeSuccessful) {
@@ -681,19 +725,18 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
         JSON.parse(jsonStringify(userOpProcessedLog))
       );
 
-      const transactionHash = transactionEvent.hash;
-      const sender = userOpProcessedLog.userOpSender;
-      const text = `(Tenderly Web3 Actions) Transaction https://v2.jiffyscan.xyz/bundle/${transactionHash} with UserOpProcessed() event and userOpHash https://v2.jiffyscan.xyz/userOpHash/${
-        userOpProcessedLog.userOpHash
-      } failed to collect charges from sender ${sender} in ChargeInPostOp mode under OffChainPaymaster ${
-        paymasters[userOpProcessedLog.userOpHash]
-      }. Please check for any potential misconduct by sender.`;
+      const senderAddress = userOpProcessedLog.userOpSender;
+      const senderOnScan = getAddressScanUrl(chainId, senderAddress);
+
+      const title = `*_(Tenderly) OffChainPaymaster failed to collect token fees 🚷_*`;
+
+      const text = `*[Description]*\n\tOffChainPaymaster failed to collect token fees from the <${senderOnScan}|sender> in ChargeInPostOp mode on the ${networkName}.\n*[Impact]*\n\tPossible attack preventing fee collection.\n*[Action Needed]*\n\t1. Check transaction parameters.\n\t2. Confirm if sender is attempting suspicious activity.\n*[Details]*\n\t1. OffChainPaymaster address: <${paymasterOnScan}|${paymasterAddress}>.\n\t2. Monitoring documents: <https://imtoken.atlassian.net/wiki/spaces/UED/pages/1635057761/imToken+Paymaster#%E7%9B%A3%E6%8E%A7%E6%96%B9%E5%BC%8F|OffChainPaymaster monitoring>.\n*[Contact]*\n\t1. Nic: <@U01DV7XCYA3>\n\t2. Jiahui: <@U03TKT79H7V>\n\t3. Irara: <@U03HEAQL36X>\n*[Triggered by]*\n\t1. Transaction: <${transactionOnScan}|${transactionHash}>.\n\t2. UserOperation: <https://v2.jiffyscan.xyz/userOpHash/${userOpHash}|${userOpHash}>`;
 
       // Notify Discord with the post-operation revert
-      await notifyDiscord(text, "", discordWebhookLink);
+      await notifyDiscord(title, text, discordWebhookLink);
 
       // Notify Slack with the post-operation revert
-      await notifySlack(text, "", slackWebhookLink);
+      await notifySlack(title, text, slackWebhookLink);
     }
   }
 
@@ -712,19 +755,22 @@ export const actionFn: ActionFn = async (context: Context, event: Event) => {
       JSON.parse(jsonStringify(postOpRevertReasonLog))
     );
 
-    const transactionHash = transactionEvent.hash;
-    const sender = postOpRevertReasonLog.sender;
-    const text = `(Tenderly Web3 Actions) Transaction https://jiffyscan.xyz/bundle/${transactionHash} with PostOpRevertReason() event and userOpHash https://jiffyscan.xyz/userOpHash/${
-      postOpRevertReasonLog.userOpHash
-    } was reverted for sender ${sender} during ChargeInPostOp mode under OffChainPaymaster ${
-      paymasters[postOpRevertReasonLog.userOpHash]
-    }. Please check for any potential misconduct by the sender.`;
+    const senderAddress = postOpRevertReasonLog.sender;
+    const senderOnScan = getAddressScanUrl(chainId, senderAddress);
+
+    const userOpHash = postOpRevertReasonLog.userOpHash;
+    const paymasterAddress = paymasters[userOpHash];
+    const paymasterOnScan = getAddressScanUrl(chainId, paymasterAddress);
+
+    const title = `*_(Tenderly) Paymaster's postOp() call reverted 🔔_*`;
+
+    const text = `*[Description]*\n\tThe UserOperation Paymaster's postOp() call reverted from the <${senderOnScan}|sender> on the ${networkName}.\n*[Impact]*\n\t1. Possible attack preventing fee collection.\n\t2. OffChainPaymaster deposits might be insufficient.\n*[Action Needed]*\n\t1. Check transaction parameters.\n\t2. Confirm if sender is attempting suspicious activity.\n\t3. Check if the OffChainPaymaster's deposits are sufficient.\n*[Details]*\n\t1. OffChainPaymaster address: <${paymasterOnScan}|${paymasterAddress}>.\n\t2. Monitoring documents: <https://imtoken.atlassian.net/wiki/spaces/UED/pages/1635057761/imToken+Paymaster#%E7%9B%A3%E6%8E%A7%E6%96%B9%E5%BC%8F|OffChainPaymaster monitoring>.\n*[Contact]*\n\t1. Nic: <@U01DV7XCYA3>\n\t2. Jiahui: <@U03TKT79H7V>\n\t3. Irara: <@U03HEAQL36X>\n*[Triggered by]*\n\t1. Transaction: <${transactionOnScan}|${transactionHash}>.\n\t2. UserOperation: <https://v2.jiffyscan.xyz/userOpHash/${userOpHash}|${userOpHash}>`;
 
     // Notify Discord with the post-operation revert
-    await notifyDiscord(text, "", discordWebhookLink);
+    await notifyDiscord(title, text, discordWebhookLink);
 
     // Notify Slack with the post-operation revert
-    await notifySlack(text, "", slackWebhookLink);
+    await notifySlack(title, text, slackWebhookLink);
   }
 
   console.log(`Tenderly Web3 Action script completed`);
